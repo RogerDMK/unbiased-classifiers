@@ -170,7 +170,7 @@ class COMPASDataset(Dataset):
     def get_columns(self):
         return self.feature_columns.columns.tolist()
 
-def create_data_splits(dataset, train_ratio=0.40, diverse_ratio=0.40, val_ratio=0.0, test_ratio=0.20, batch_size=64, seed=42):
+def create_data_splits(dataset, train_ratio=0.40, diverse_ratio=0.40, val_ratio=0.0, test_ratio=0.20, batch_size=64, seed=64):
     assert np.isclose(train_ratio + val_ratio + test_ratio + diverse_ratio, 1.0)
     torch.manual_seed(seed)
     dataset_size = len(dataset)
@@ -235,3 +235,106 @@ def explain_model(model, num_classes, dataset, model_name, input_dim, train_colu
             labels=train_columns,
             title='Shapely - {} model class {} over {} samples.'.format(model_name, current_class, len(dataset)),
             save_name='shap_{}_{}.png'.format(model_name, current_class))
+        
+def class_weights(dataset):
+    label_counts = {}
+    for _, label in dataset:
+        label_item = label.item() if isinstance(label, torch.Tensor) else label
+        if label_item in label_counts:
+            label_counts[label_item] += 1
+        else:
+            label_counts[label_item] = 1
+
+    # Get unique class indices and map to sequential integers if needed
+    class_indices = sorted(label_counts.keys())
+    idx_map = {idx: i for i, idx in enumerate(class_indices)}
+    
+    # Calculate weights
+    num_samples = len(dataset)
+    num_classes = len(label_counts)
+    weights = torch.zeros(num_classes)
+
+    for class_idx, count in label_counts.items():
+        mapped_idx = idx_map[class_idx]  # Map to sequential index
+        weights[mapped_idx] = num_samples / (count * num_classes)
+    return weights
+
+def collate_fn(
+    batch,
+    tokenizer,
+    max_len: int = 64
+):
+    texts, labels = zip(*[(ex["text"], ex["labels"]) for ex in batch])
+    
+    enc = tokenizer(
+        list(texts),
+        padding="max_length",
+        truncation=True,
+        max_length=max_len,
+        return_tensors="pt"
+    )
+    
+    return (
+        enc["input_ids"], 
+        enc["attention_mask"], 
+        torch.tensor(labels, dtype=torch.long)
+    )
+
+def collate_fn_unlab(
+    batch,
+    tokenizer,
+    max_len: int = 64
+):
+    """
+    Batch ➔ (input_ids, attention_mask)
+    Drops any 'labels' in the examples.
+    """
+    texts = [ex["text"] for ex in batch]
+    enc = tokenizer(
+        texts,
+        padding="max_length",
+        truncation=True,
+        max_length=max_len,
+        return_tensors="pt"
+    )
+    return enc["input_ids"], enc["attention_mask"]
+
+def twitter_eval():
+    chunk_list = [] # create an empty list to hold chunks
+    chunksize = 10000 # set chunk size
+    read_lines = 0
+    for chunk in pd.read_csv(filepath_or_buffer='TwitterAAE-full-v1/twitteraae_all', sep='\t', chunksize=chunksize, on_bad_lines='skip'): # read in csv in chunks of chunksize
+        # processed_chunk = chunk_processing(chunk) # process the chunks with chunk_processing() function
+        chunk_list.append(chunk) # append the chunks to a list
+        
+        if read_lines < 20:
+            read_lines += 1
+        else:
+            break
+    
+    df_concat = pd.concat(chunk_list)
+    columns_to_drop = [1,2,3,4]
+    df_concat = df_concat.drop(columns=df_concat.columns[columns_to_drop])
+    df_concat.columns = ['tweet_id', 'tweet_content', 'AA_score', 'Hispanic_score', 'Other_score', 'White_score']
+    white = df_concat[df_concat['White_score'] >= 0.8]
+    print(white.first)
+    chunk_list = [] 
+    chunksize = 10000
+    read_lines = 0
+    for chunk in pd.read_csv(filepath_or_buffer='TwitterAAE-full-v1/twitteraae_all_aa', sep='\t', chunksize=chunksize, on_bad_lines='skip'): # read in csv in chunks of chunksize
+        # processed_chunk = chunk_processing(chunk) # process the chunks with chunk_processing() function
+        chunk_list.append(chunk) # append the chunks to a list
+        
+        if read_lines < 8:
+            read_lines += 1
+        else:
+            break
+    AA = pd.concat(chunk_list)
+    columns_to_drop = [1,2,3,4]
+    AA = AA.drop(columns=AA.columns[columns_to_drop])
+    AA.columns = ['tweet_id', 'tweet_content', 'AA_score', 'Hispanic_score', 'Other_score', 'White_score']
+    AA = AA[AA['AA_score'] >= 0.8]
+    AA.to_csv('AA_eval.csv')
+    white.to_csv('White_eval.csv')
+
+twitter_eval()

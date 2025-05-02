@@ -1,5 +1,46 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from transformers import AutoModel
+
+class ResidualBlock(nn.Module):
+    def __init__(self, dim, dropout_rate=0.0):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Linear(dim, dim),
+            nn.LayerNorm(dim),
+            nn.GELU(),
+            nn.Dropout(dropout_rate),
+            nn.Linear(dim, dim),
+            nn.LayerNorm(dim),
+            nn.GELU(),
+            nn.Dropout(dropout_rate),
+        )
+
+    def forward(self, x):
+        return x + self.block(x)  # Residual connection
+
+
+class ResidualMLPClassifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim=128, num_blocks=3, dropout_rate=0.1, num_classes=3):
+        super().__init__()
+        self.input_proj = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU()
+        )
+        self.num_classes = num_classes
+        self.blocks = nn.Sequential(*[
+            ResidualBlock(hidden_dim, dropout_rate) for _ in range(num_blocks)
+        ])
+
+        self.head = nn.Linear(hidden_dim, num_classes)
+
+    def forward(self, x):
+        x = self.input_proj(x)
+        x = self.blocks(x)
+        logits = self.head(x)
+        return logits
 
 class BaseClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dims=[64, 32], dropout_rate=0.0, num_classes=3):
