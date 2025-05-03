@@ -3,14 +3,14 @@ import html, re, torch, torch.nn as nn, numpy as np
 from transformers import AutoTokenizer
 from datasets import load_dataset             
 from torch.utils.data import DataLoader
-from utils import collate_fn, collate_fn_unlab
+from utils import collate_fn, collate_fn_unlab, twitter_load
 from functools import partial
 from models import BERT_models_baseline, BERT_models_DivDis
 from train import train_bert_baseline, train_bert_DivDis
-from utils import explain_model
 
 ds = load_dataset("tdavidson/hate_speech_offensive")["train"]
 shuffled_ds = ds.shuffle(seed = 42)
+
 def prepare(example):
 # (i) rename the target column ------------------------------------------------
     example["labels"] = int(example["class"])       # 0 hate, 1 offensive, 2 neither
@@ -22,6 +22,20 @@ def prepare(example):
     example["text"] = text
 
     return example
+
+def get_softmax(model, texts):
+    model.eval()
+    enc = tok(
+        texts,
+        padding=True,
+        truncation=True,
+        max_length=128,
+        return_tensors="pt",
+    )           
+    with torch.no_grad():
+        logits = model(enc["input_ids"], enc["attention_mask"])
+        probs = torch.softmax(logits, dim=-1).cpu()
+    return probs
 
 ds = ds.map(prepare, remove_columns=["count",
                                     "hate_speech_count",
@@ -38,7 +52,6 @@ train_data_unlabeled = ds.select(range(n_labeled, n_unlabled))
 test_data  = ds.select(range(n_unlabled, total))
 
 tok = AutoTokenizer.from_pretrained("bert-base-uncased")
-
 
 labelled_loader = DataLoader(
     train_data_labeled,
@@ -98,10 +111,26 @@ full_loss  = train_bert_DivDis(
     num_epochs = 3,
     learning_rate = 2e-5
 )
-# train_columns = ["hate_speech", "offensive_language", "neither"]
-#best_model.eval()
+aa_path = "AA_eval.csv"
+white_path = "White_eval.csv"
+aa_data, white_data = twitter_load(aa_path = "AA_eval.csv", white_path = "White_eval.csv", num_samples = 1000, seed = 42)
+aa_probs = get_softmax(div_model, aa_data)
+white_probs = get_softmax(div_model, white_data)
+
+num_heads = aa_probs.shape[1]
+for h in range(num_heads):
+    np.save(f"AA_head{h}_probs.npy", aa_probs[:, h, :])
+    np.save(f"White_head{h}_probs.npy", white_probs[:, h, :])
+
+for h in range(num_heads):
+    aa_hate, aa_offensive = aa_probs[:,h,0].mean(), aa_probs[:,h,1].mean()
+    white_hate, white_offensive = white_probs[:,h,0].mean(), white_probs[:,h,1].mean()
+    print(f"Head {h} AA: hate = {aa_hate}, offensive={aa_offensive}")
+    print(f"Head {h} White: hate = {white_hate}, offensive={white_offensive}")
+
 # for head in range(div_model.num_heads):
 #     model_name = "DivDis model head_ {}".format(head)
 #     model_head = HeadWrapper(div_model, head)
 #     model_head.eval()
 #     explain_model(model_head, div_model.num_classes, test_data, model_name, input_dim, train_columns)
+

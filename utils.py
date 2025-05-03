@@ -3,7 +3,7 @@ import numpy as np
 import seaborn as sns 
 import matplotlib.pyplot as plt 
 from torch.utils.data import DataLoader, random_split, Dataset
-from explainer import Explainer
+#from explainer import Explainer
 from models import ModelWrapper
 
 import os 
@@ -337,4 +337,15 @@ def twitter_eval():
     AA.to_csv('AA_eval.csv')
     white.to_csv('White_eval.csv')
 
-twitter_eval()
+def twitter_load(aa_path: str = "AA_eval.csv", white_path : str = "White_eval.csv", num_samples: int = 1000, seed: int = 42):
+    aa_data = pd.read_csv(aa_path)
+    white_data = pd.read_csv(white_path)
+
+    aa_sample = aa_data.sample(n=num_samples, random_state=seed).reset_index(True)
+    white_sample = white_data.sample(n=num_samples, random_state=seed).reset_index(True)
+
+    return aa_sample, white_sample
+
+
+#twitter_eval()
+
