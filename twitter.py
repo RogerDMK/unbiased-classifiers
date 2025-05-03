@@ -22,8 +22,14 @@ def prepare(example):
     example["text"] = text
 
     return example
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
 
-def get_softmax(model, texts):
+def get_softmax(model, texts, device):
     model.eval()
     enc = tok(
         texts,
@@ -31,7 +37,7 @@ def get_softmax(model, texts):
         truncation=True,
         max_length=128,
         return_tensors="pt",
-    )           
+    ).to(device)           
     with torch.no_grad():
         logits = model(enc["input_ids"], enc["attention_mask"])
         probs = torch.softmax(logits, dim=-1).cpu()
@@ -108,29 +114,21 @@ full_loss  = train_bert_DivDis(
     diverse_loader = unlabeled_loader,
     val_loader = test_loader,
     criterion = criterion,
-    num_epochs = 3,
+    num_epochs = 1,
     learning_rate = 2e-5
 )
 aa_path = "AA_eval.csv"
 white_path = "White_eval.csv"
 aa_data, white_data = twitter_load(aa_path = "AA_eval.csv", white_path = "White_eval.csv", num_samples = 1000, seed = 42)
-aa_probs = get_softmax(div_model, aa_data)
-white_probs = get_softmax(div_model, white_data)
+
+aa_probs = get_softmax(div_model, aa_data, device)
+white_probs = get_softmax(div_model, white_data, device)
 
 num_heads = aa_probs.shape[1]
-for h in range(num_heads):
-    np.save(f"AA_head{h}_probs.npy", aa_probs[:, h, :])
-    np.save(f"White_head{h}_probs.npy", white_probs[:, h, :])
 
 for h in range(num_heads):
     aa_hate, aa_offensive = aa_probs[:,h,0].mean(), aa_probs[:,h,1].mean()
     white_hate, white_offensive = white_probs[:,h,0].mean(), white_probs[:,h,1].mean()
     print(f"Head {h} AA: hate = {aa_hate}, offensive={aa_offensive}")
     print(f"Head {h} White: hate = {white_hate}, offensive={white_offensive}")
-
-# for head in range(div_model.num_heads):
-#     model_name = "DivDis model head_ {}".format(head)
-#     model_head = HeadWrapper(div_model, head)
-#     model_head.eval()
-#     explain_model(model_head, div_model.num_classes, test_data, model_name, input_dim, train_columns)
 

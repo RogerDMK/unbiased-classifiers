@@ -341,10 +341,10 @@ def twitter_load(aa_path: str = "AA_eval.csv", white_path : str = "White_eval.cs
     aa_data = pd.read_csv(aa_path)
     white_data = pd.read_csv(white_path)
 
-    aa_sample = aa_data.sample(n=num_samples, random_state=seed).reset_index(True)
-    white_sample = white_data.sample(n=num_samples, random_state=seed).reset_index(True)
+    aa_sample = aa_data.sample(n=num_samples, random_state=seed).reset_index(drop=True)
+    white_sample = white_data.sample(n=num_samples, random_state=seed).reset_index(drop=True)
 
-    return aa_sample, white_sample
+    return aa_sample["tweet_content"].tolist(), white_sample["tweet_content"].tolist()
 
 
 #twitter_eval()
