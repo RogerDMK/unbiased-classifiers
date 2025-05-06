@@ -1,7 +1,8 @@
 import pandas as pd 
 import numpy as np 
 import seaborn as sns 
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
+import scipy.stats as stats
 from torch.utils.data import DataLoader, random_split, Dataset
 #from explainer import Explainer
 from models import ModelWrapper
@@ -346,6 +347,67 @@ def twitter_load(aa_path: str = "AA_eval.csv", white_path : str = "White_eval.cs
 
     return aa_sample["tweet_content"].tolist(), white_sample["tweet_content"].tolist()
 
+def perform_bias_analysis(p_black, p_white, class_name=""):
+    # Calculate the mean proportions
+    p_black_mean = np.mean(p_black)
+    p_white_mean = np.mean(p_white)
+    
+    # Calculate the ratio
+    ratio = p_black_mean / p_white_mean
+    
+    # Perform t-test
+    t_stat, p_value = stats.ttest_ind(p_black, p_white)
+    
+    print(f"Class: {class_name}")
+    print(f"Mean proportion in Black corpus: {p_black_mean:.4f}")
+    print(f"Mean proportion in White corpus: {p_white_mean:.4f}")
+    print(f"Ratio (Black/White): {ratio:.4f}")
+    print(f"t-statistic: {t_stat:.4f}")
+    print(f"p-value: {p_value:.8f}")
+    print(f"Statistically significant difference: {p_value < 0.05}")
+    print("-" * 50)
+    
+    return {
+        "class": class_name,
+        "p_black_mean": p_black_mean,
+        "p_white_mean": p_white_mean,
+        "ratio": ratio,
+        "t_stat": t_stat,
+        "p_value": p_value,
+        "significant": p_value < 0.05
+    }
 
-#twitter_eval()
+def plot_bias_results(results_df):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    
+    # Plot the proportions
+    classes = results_df['class']
+    x = np.arange(len(classes))
+    width = 0.35
+    
+    ax1.bar(x - width/2, results_df['p_black_mean'], width, label='Black corpus')
+    ax1.bar(x + width/2, results_df['p_white_mean'], width, label='White corpus')
+    ax1.set_ylabel('Proportion')
+    ax1.set_title('Class Proportions by Corpus')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(classes)
+    ax1.legend()
+    
+    # Plot the ratios
+    ax2.bar(x, results_df['ratio'], width)
+    ax2.axhline(y=1, color='r', linestyle='-', alpha=0.3)
+    ax2.set_ylabel('Ratio (Black/White)')
+    ax2.set_title('Proportion Ratio by Class')
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(classes)
+    
+    # Add asterisks for statistical significance
+    for i, significant in enumerate(results_df['significant']):
+        if significant:
+            ax2.text(i, results_df['ratio'][i] + 0.1, '*', ha='center', fontsize=16)
+    
+    plt.tight_layout()
+    plt.show()
+
+
 

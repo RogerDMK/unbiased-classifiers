@@ -11,11 +11,21 @@ class BERT_models_baseline(nn.Module):
         super().__init__()
         self.bert = AutoModel.from_pretrained(pretrain_model)
         hidden = self.bert.config.hidden_size
-        self.classifier = BaseClassifier(
-            input_dim = hidden,
-            dropout_rate=mlp_dropout,
-            num_classes=num_classes
-        )
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden, 128),
+            nn.BatchNorm1d(128),
+            nn.GELU(),
+            nn.Dropout(mlp_dropout),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.GELU(),
+            nn.Dropout(mlp_dropout),
+            nn.Linear(64, 16),
+            nn.BatchNorm1d(16),
+            nn.GELU(),
+            nn.Dropout(mlp_dropout),
+            nn.Linear(16, num_classes)
+            )
 
     def forward(self, input_ids, attn_masks=None, token_type_ids=None):
         outputs = self.bert(input_ids=input_ids, attention_mask=attn_masks, token_type_ids=token_type_ids, return_dict=True)
@@ -117,19 +127,19 @@ class DivDisClassifier(nn.Module):
         super().__init__()
 
         self.model = nn.ModuleList([nn.Sequential(
-            nn.Linear(input_dim, 32),
-            nn.BatchNorm1d(32),
+            nn.Linear(input_dim, 128),
+            nn.BatchNorm1d(128),
             nn.GELU(),
             nn.Dropout(dropout_rate),
-            nn.Linear(32, 16),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.GELU(),
+            nn.Dropout(dropout_rate),
+            nn.Linear(64, 16),
             nn.BatchNorm1d(16),
             nn.GELU(),
             nn.Dropout(dropout_rate),
-            nn.Linear(16, 4),
-            nn.BatchNorm1d(4),
-            nn.GELU(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(4, num_classes)
+            nn.Linear(16, num_classes)
             ) for _ in range(num_heads)])
         
         self.num_heads = num_heads

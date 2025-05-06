@@ -3,7 +3,7 @@ import html, re, torch, torch.nn as nn, numpy as np
 from transformers import AutoTokenizer
 from datasets import load_dataset             
 from torch.utils.data import DataLoader
-from utils import collate_fn, collate_fn_unlab, twitter_load
+from utils import collate_fn, collate_fn_unlab, twitter_load, perform_bias_analysis
 from functools import partial
 from models import BERT_models_baseline, BERT_models_DivDis
 from train import train_bert_baseline, train_bert_DivDis
@@ -87,16 +87,30 @@ test_loader  = DataLoader(
 )
 
 # model = BERT_models_baseline(pretrain_model="bert-base-uncased",
-#     mlp_hidden=[64,32],
-#     mlp_dropout=0.1,
+#     mlp_dropout=0.3,
 #     num_classes=3)
    
 # best_model, hist = train_bert_baseline(
 #     model,
 #     train_loader=labelled_loader,
 #     val_loader=test_loader,   # or a separate val_loader
-#     num_epochs=1
+#     num_epochs=3
 # )
+
+# aa_path = "AA_eval.csv"
+# white_path = "White_eval.csv"
+# aa_data, white_data = twitter_load(aa_path = "AA_eval.csv", white_path = "White_eval.csv", num_samples = 1000, seed = 42)
+
+# aa_probs = get_softmax(best_model, aa_data, device)
+# white_probs = get_softmax(best_model, white_data, device)
+
+
+# aa_hate, aa_offensive = aa_probs[:,0].numpy(), aa_probs[:,1].numpy()
+# white_hate, white_offensive = white_probs[:,0].numpy(), white_probs[:,1].numpy()
+# perform_bias_analysis(aa_hate, white_hate, "Base: hate")
+# perform_bias_analysis(aa_offensive, white_offensive, "Base: offensive")
+
+
 
 div_model = BERT_models_DivDis(
     pretrain_model="bert-base-uncased",
@@ -114,7 +128,7 @@ full_loss  = train_bert_DivDis(
     diverse_loader = unlabeled_loader,
     val_loader = test_loader,
     criterion = criterion,
-    num_epochs = 1,
+    num_epochs = 3,
     learning_rate = 2e-5
 )
 aa_path = "AA_eval.csv"
@@ -127,8 +141,8 @@ white_probs = get_softmax(div_model, white_data, device)
 num_heads = aa_probs.shape[1]
 
 for h in range(num_heads):
-    aa_hate, aa_offensive = aa_probs[:,h,0].mean(), aa_probs[:,h,1].mean()
-    white_hate, white_offensive = white_probs[:,h,0].mean(), white_probs[:,h,1].mean()
-    print(f"Head {h} AA: hate = {aa_hate}, offensive={aa_offensive}")
-    print(f"Head {h} White: hate = {white_hate}, offensive={white_offensive}")
+    aa_hate, aa_offensive = aa_probs[:,h,0].numpy(), aa_probs[:,h,1].numpy()
+    white_hate, white_offensive = white_probs[:,h,0].numpy(), white_probs[:,h,1].numpy()
+    perform_bias_analysis(aa_hate, white_hate, "Head {}: hate".format(h))
+    perform_bias_analysis(aa_offensive, white_offensive, "Head {}: offensive".format(h))
 

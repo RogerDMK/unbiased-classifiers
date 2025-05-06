@@ -181,7 +181,7 @@ def train_bert_baseline(
     device = torch.device(device)
     model.to(device)
 
-    optimizer = torch.optim.AdamW(model.parameters(), learning_rate=learning_rate, weight_decay=weight_decay)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     total_steps = num_epochs * len(train_loader)
     warmup_steps  = int(0.1 * total_steps)
 
