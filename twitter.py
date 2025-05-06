@@ -13,7 +13,8 @@ else:
     device = torch.device("cpu")
 
 print(f"Using device: {device}, GPU count: {torch.cuda.device_count()}")
-
+aa_path = "AA_eval.csv"
+white_path = "White_eval.csv"
 ds = pd.read_csv("hate_offensive_data.csv")
 ds = ds.drop(columns=["count","hate_speech", "offensive_language","neither"])
 
@@ -26,7 +27,10 @@ os.makedirs(folder_path, exist_ok=True)
 for seed in seed_arr:
     seed_path = os.path.join(folder_path, f"seed_{seed}.txt")
     with open(seed_path, "w") as seed_file, redirect_stdout(seed_file):
+
         labelled_loader_DivDis, unlabeled_loader ,_, test_loader, labelled_loader= BERT_create_data_splits(ds, tok, seed=seed)
+        aa_data, white_data = twitter_load(aa_path = aa_path, white_path = white_path, num_samples = 1000, seed = seed)
+
         #Base Model
         model = BERT_models_baseline(pretrain_model="bert-base-uncased",
             mlp_dropout=0.3,
@@ -40,10 +44,6 @@ for seed in seed_arr:
             num_epochs=3,
             device=device
         )
-
-        aa_path = "AA_eval.csv"
-        white_path = "White_eval.csv"
-        aa_data, white_data = twitter_load(aa_path = "AA_eval.csv", white_path = "White_eval.csv", num_samples = 1000, seed = seed)
 
         aa_probs = get_softmax(best_model, aa_data,tok, device)
         white_probs = get_softmax(best_model, white_data,tok, device)
@@ -80,10 +80,6 @@ for seed in seed_arr:
             learning_rate = 2e-5,
             device=device
         )
-
-        aa_path = "AA_eval.csv"
-        white_path = "White_eval.csv"
-        aa_data, white_data = twitter_load(aa_path = "AA_eval.csv", white_path = "White_eval.csv", num_samples = 1000, seed = seed)
 
         aa_probs = get_softmax(div_model, aa_data,tok, device)
         white_probs = get_softmax(div_model, white_data,tok, device)
