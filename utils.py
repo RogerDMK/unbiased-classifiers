@@ -437,8 +437,11 @@ def random_seed_arr(seed):
     random.seed(seed)
     return random.sample(range(0, 100), 10)
 
-def get_softmax(model, texts, tok, device):
+def get_softmax(model, texts, tok, device="cpu"):
+    device = torch.device(device)
+    model.to(device)
     model.eval()
+
     enc = tok(
         texts,
         padding=True,

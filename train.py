@@ -170,14 +170,8 @@ def train_bert_baseline(
     num_epochs: int = 5,
     learning_rate: float = 2e-5,
     weight_decay: float = 1e-3,
-    device = None,
+    device = "cpu",
 ):
-    if device is None:
-        device = (
-            "cuda" if torch.cuda.is_available()
-            else "mps" if torch.backends.mps.is_available()
-            else "cpu"
-        )
     device = torch.device(device)
     model.to(device)
 
@@ -254,14 +248,8 @@ def train_bert_DivDis(
     num_epochs: int = 3,
     learning_rate: float = 2e-5,
     weight_decay: float = 1e-3,
-    device = None,
+    device = "cpu",
 ):
-    if device is None:
-        device = (
-            "cuda" if torch.cuda.is_available()
-            else "mps" if torch.backends.mps.is_available()
-            else "cpu"
-        )
     device = torch.device(device)
     model.to(device)
 
@@ -269,7 +257,7 @@ def train_bert_DivDis(
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     total_steps = num_epochs * len(train_loader)
-    warmup_steps  = int(0.1 * total_steps)  # first 10% warm-up
+    warmup_steps  = int(0.1 * total_steps)
 
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
@@ -324,7 +312,7 @@ def train_bert_DivDis(
             acc = class_acc_tracker[h] / len(train_loader)
             print(f"head {h}: loss {class_loss_tracker[h]:.4f} | acc {acc:.4f}")
         print(f"div loss : {div_loss_tracker/len(train_loader):.4f}")
-        print(f" ensemble loss : {total_loss_tracker/len(train_loader):.4f}")
+        print(f"ensemble loss : {total_loss_tracker/len(train_loader):.4f}")
 
     model.eval()
     all_targets    = []
