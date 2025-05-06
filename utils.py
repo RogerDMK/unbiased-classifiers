@@ -3,12 +3,14 @@ import numpy as np
 import seaborn as sns 
 import matplotlib.pyplot as plt
 import scipy.stats as stats
+from functools import partial
 from torch.utils.data import DataLoader, random_split, Dataset
-#from explainer import Explainer
+from explainer import Explainer
 from models import ModelWrapper
-
+import random
 import os 
 import torch
+import html, re
 # from fairness_analysis import TripleLinearClassifier, SingleLinearClassifier, config_loss, config_optimizer, train
 # from explainer import Explainer
 
@@ -188,6 +190,28 @@ def create_data_splits(dataset, train_ratio=0.40, diverse_ratio=0.40, val_ratio=
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
     return train_loader, diverse_loader, val_loader, test_loader, train_dataset, diverse_dataset, val_dataset, test_dataset
+
+def BERT_create_data_splits(dataset, tokenizer, train_ratio=0.40, diverse_ratio=0.40, val_ratio=0.0, test_ratio=0.20, batch_size=64, seed=64):
+    assert np.isclose(train_ratio + val_ratio + test_ratio + diverse_ratio, 1.0)
+    torch.manual_seed(seed)
+    dataset_size = len(dataset)
+    train_size_base = int((train_ratio + diverse_ratio) * dataset_size)
+    train_size = int(train_ratio * dataset_size)
+    diverse_size = int(diverse_ratio * dataset_size)
+    val_size = int(val_ratio * dataset_size)
+    test_size = dataset_size - diverse_size - train_size - val_size
+    train_dataset_divdis, diverse_dataset_divdis, val_dataset, test_dataset = random_split(
+        dataset, [train_size, diverse_size, val_size, test_size]
+    )
+    train_dataset_base = dataset[:train_size_base]
+    train_loader = DataLoader(train_dataset_divdis, batch_size=batch_size, shuffle=True, collate_fn = partial(collate_fn, tokenizer=tokenizer))
+    div_batch_size = len(diverse_dataset_divdis)//len(train_loader) + 1
+    diverse_loader = DataLoader(diverse_dataset_divdis, batch_size=div_batch_size, shuffle=True, collate_fn=partial(collate_fn_unlab, tokenizer=tokenizer))
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, collate_fn = partial(collate_fn, tokenizer=tokenizer))
+    train_loader_base = DataLoader(train_dataset_base, batch_size=batch_size, shuffle=True, collate_fn = partial(collate_fn, tokenizer=tokenizer))
+
+    return train_loader, diverse_loader, val_loader, test_loader, train_loader_base
 
 def explain_model(model, num_classes, dataset, model_name, input_dim, train_columns):
     feature_count_all_lime = []
@@ -409,5 +433,32 @@ def plot_bias_results(results_df):
     plt.tight_layout()
     plt.show()
 
+def random_seed_arr(seed):
+    random.seed(seed)
+    return random.sample(range(0, 100), 10)
 
+def get_softmax(model, texts, tok, device):
+    model.eval()
+    enc = tok(
+        texts,
+        padding=True,
+        truncation=True,
+        max_length=128,
+        return_tensors="pt",
+    ).to(device)           
+    with torch.no_grad():
+        logits = model(enc["input_ids"], enc["attention_mask"])
+        probs = torch.softmax(logits, dim=-1).cpu()
+    return probs
 
+def prepare(example):
+# (i) rename the target column ------------------------------------------------
+    example["labels"] = int(example["class"])       # 0 hate, 1 offensive, 2 neither
+
+    # (ii) light tweet cleaning ---------------------------------------------------
+    text = html.unescape(example["tweet"])
+    text = re.sub(r"http\S+", "URL", text)          # keep URL token
+    text = re.sub(r"@\w+", "@USER", text)           # normalise @mentions
+    example["text"] = text
+
+    return example
