@@ -1,5 +1,5 @@
 
-import torch, torch.nn as nn, numpy as np, pandas as pd
+import os, torch, torch.nn as nn, numpy as np, pandas as pd
 from contextlib import redirect_stdout
 from transformers import AutoTokenizer     
 from train import train_bert_baseline, train_bert_DivDis 
@@ -20,15 +20,13 @@ ds = ds.drop(columns=["count","hate_speech", "offensive_language","neither"])
 ds = [ prepare(row) for row in ds.to_dict(orient="records") ]
 
 tok = AutoTokenizer.from_pretrained("bert-base-uncased")
-
 seed_arr = random_seed_arr(seed = 12)
-
+folder_path = "twitter_results"
+os.makedirs(folder_path, exist_ok=True)
 for seed in seed_arr:
-    seed_path = f"seed_{seed}.txt"
+    seed_path = os.path.join(folder_path, f"seed_{seed}.txt")
     with open(seed_path, "w") as seed_file, redirect_stdout(seed_file):
         labelled_loader_DivDis, unlabeled_loader ,_, test_loader, labelled_loader= BERT_create_data_splits(ds, tok, seed=seed)
-
-
         #Base Model
         model = BERT_models_baseline(pretrain_model="bert-base-uncased",
             mlp_dropout=0.3,
@@ -57,6 +55,7 @@ for seed in seed_arr:
         perform_bias_analysis(aa_offensive, white_offensive, "Base: offensive")
 
         print("################(End of base model)################\n")
+
         #DivDis Model
         div_model = BERT_models_DivDis(
             pretrain_model="bert-base-uncased",
@@ -67,8 +66,10 @@ for seed in seed_arr:
         )
 
         criterion = nn.CrossEntropyLoss()
+        
         if torch.cuda.device_count() > 1:
             div_model = nn.DataParallel(div_model)
+
         full_loss  = train_bert_DivDis(
             model = div_model,
             train_loader = labelled_loader_DivDis,

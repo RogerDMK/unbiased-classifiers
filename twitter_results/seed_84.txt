@@ -1,0 +1,118 @@
+[[  93 1156   16]
+ [  49 2175    8]
+ [ 151  494  815]]
+Epoch [1/3] | Train Loss: 1.0260 | Val Loss: 0.9572 | Val F1: 0.5155
+Precision: 0.6191 | Recall: 0.5354
+[[ 168  599   16]
+ [  66 2992    4]
+ [  59  234  819]]
+Epoch [2/3] | Train Loss: 0.8945 | Val Loss: 0.8482 | Val F1: 0.6736
+Precision: 0.7773 | Recall: 0.6427
+[[ 165  446    9]
+ [  71 3154    5]
+ [  57  225  825]]
+Epoch [3/3] | Train Loss: 0.8540 | Val Loss: 0.8262 | Val F1: 0.7012
+Precision: 0.7903 | Recall: 0.6626
+Best macro-F1: 0.7011521814238394
+Class: Base: hate
+Mean proportion in Black corpus: 0.2532
+Mean proportion in White corpus: 0.2032
+Ratio (Black/White): 1.2459
+t-statistic: 13.7231
+p-value: 0.00000000
+Statistically significant difference: True
+--------------------------------------------------
+Class: Base: offensive
+Mean proportion in Black corpus: 0.2129
+Mean proportion in White corpus: 0.1755
+Ratio (Black/White): 1.2136
+t-statistic: 12.9699
+p-value: 0.00000000
+Statistically significant difference: True
+--------------------------------------------------
+################(End of base model)################
+
+Epoch 0
+head 0: loss 172.0653 | acc 0.3503
+head 1: loss 148.9925 | acc 0.6219
+head 2: loss 172.6445 | acc 0.3650
+div loss : 0.0012
+ensemble loss : 1.0617
+Epoch 1
+head 0: loss 146.9766 | acc 0.5624
+head 1: loss 122.4188 | acc 0.8348
+head 2: loss 140.1165 | acc 0.6047
+div loss : 0.0061
+ensemble loss : 0.8807
+Epoch 2
+head 0: loss 140.6801 | acc 0.6218
+head 1: loss 115.2683 | acc 0.8630
+head 2: loss 133.0251 | acc 0.6666
+div loss : 0.0085
+ensemble loss : 0.8365
+
+Stats for head 0
+[[ 190   60   43]
+ [ 716 2983  126]
+ [  63    8  768]]
+F1 0.6779 | Precision 0.6645 | Recall 0.7812 | Acc 0.7950
+
+Stats for head 1
+[[   4  231   58]
+ [  34 3655  136]
+ [   4   47  788]]
+F1 0.6105 | Precision 0.6090 | Recall 0.6361 | Acc 0.8971
+
+Stats for head 2
+[[ 199   61   33]
+ [ 834 2905   86]
+ [ 100   14  725]]
+F1 0.6648 | Precision 0.6698 | Recall 0.7676 | Acc 0.7724
+Class: Head 0: hate
+Mean proportion in Black corpus: 0.3285
+Mean proportion in White corpus: 0.3105
+Ratio (Black/White): 1.0581
+t-statistic: 6.5527
+p-value: 0.00000000
+Statistically significant difference: True
+--------------------------------------------------
+Class: Head 0: offensive
+Mean proportion in Black corpus: 0.2023
+Mean proportion in White corpus: 0.1427
+Ratio (Black/White): 1.4178
+t-statistic: 14.9457
+p-value: 0.00000000
+Statistically significant difference: True
+--------------------------------------------------
+Class: Head 1: hate
+Mean proportion in Black corpus: 0.2749
+Mean proportion in White corpus: 0.2438
+Ratio (Black/White): 1.1276
+t-statistic: 12.9490
+p-value: 0.00000000
+Statistically significant difference: True
+--------------------------------------------------
+Class: Head 1: offensive
+Mean proportion in Black corpus: 0.2236
+Mean proportion in White corpus: 0.1466
+Ratio (Black/White): 1.5260
+t-statistic: 13.5560
+p-value: 0.00000000
+Statistically significant difference: True
+--------------------------------------------------
+Class: Head 2: hate
+Mean proportion in Black corpus: 0.3169
+Mean proportion in White corpus: 0.2687
+Ratio (Black/White): 1.1790
+t-statistic: 10.3484
+p-value: 0.00000000
+Statistically significant difference: True
+--------------------------------------------------
+Class: Head 2: offensive
+Mean proportion in Black corpus: 0.1841
+Mean proportion in White corpus: 0.1086
+Ratio (Black/White): 1.6956
+t-statistic: 13.9839
+p-value: 0.00000000
+Statistically significant difference: True
+--------------------------------------------------
