@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModel
+from transformers import AutoModel, RobertaForSequenceClassification
 
 class BERT_models_baseline(nn.Module):
     def __init__(self, pretrain_model : str =  "bert-base-uncased",
@@ -25,7 +25,7 @@ class BERT_models_baseline(nn.Module):
             nn.GELU(),
             nn.Dropout(mlp_dropout),
             nn.Linear(16, num_classes)
-            )
+        )
 
     def forward(self, input_ids, attn_masks=None, token_type_ids=None):
         outputs = self.bert(input_ids=input_ids, attention_mask=attn_masks, token_type_ids=token_type_ids, return_dict=True)
@@ -177,3 +177,110 @@ class HeadWrapper(nn.Module):
         if self.apply_softmax:
             out = self.softmax(out)
         return out
+
+class JigsawToxicityClassifier(nn.Module):
+    def __init__(self, pretrain_model="bert-base-uncased", num_identity_features=0, mlp_dropout=0.1):
+        super().__init__()
+        self.bert = AutoModel.from_pretrained(pretrain_model)
+        hidden = self.bert.config.hidden_size
+        
+        # If we want to incorporate identity features
+        self.use_identity = num_identity_features > 0
+        if self.use_identity:
+            self.classifier = nn.Sequential(
+                nn.Linear(hidden + num_identity_features, 128),
+                nn.BatchNorm1d(128),
+                nn.GELU(),
+                nn.Dropout(mlp_dropout),
+                nn.Linear(128, 64),
+                nn.BatchNorm1d(64),
+                nn.GELU(),
+                nn.Dropout(mlp_dropout),
+                nn.Linear(64, 16),
+                nn.BatchNorm1d(16),
+                nn.GELU(),
+                nn.Dropout(mlp_dropout),
+                nn.Linear(16, 2)  # Binary classification for toxicity
+            )
+        else:
+            self.classifier = nn.Sequential(
+                nn.Linear(hidden, 128),
+                nn.BatchNorm1d(128),
+                nn.GELU(),
+                nn.Dropout(mlp_dropout),
+                nn.Linear(128, 64),
+                nn.BatchNorm1d(64),
+                nn.GELU(),
+                nn.Dropout(mlp_dropout),
+                nn.Linear(64, 16),
+                nn.BatchNorm1d(16),
+                nn.GELU(),
+                nn.Dropout(mlp_dropout),
+                nn.Linear(16, 2)  # Binary classification for toxicity
+            )
+        
+    def forward(self, input_ids, attention_mask, identity_features=None):
+        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
+        pooled_output = outputs.pooler_output
+        
+        if self.use_identity and identity_features is not None:
+            # Concatenate with identity features
+            combined = torch.cat([pooled_output, identity_features], dim=1)
+            logits = self.classifier(combined)
+        else:
+            logits = self.classifier(pooled_output)
+            
+        return logits
+
+class JigsawDivDisClassifier(nn.Module):
+    def __init__(self, pretrain_model="bert-base-uncased", num_identity_features=0, 
+                 num_heads=3, mlp_dropout=0.1, diversity_weight=1e-3):
+        super().__init__()
+        self.bert = AutoModel.from_pretrained(pretrain_model)
+        hidden = self.bert.config.hidden_size
+        self.num_heads = num_heads
+        self.diversity_weight = diversity_weight
+        
+        # If we want to incorporate identity features
+        self.use_identity = num_identity_features > 0
+        if self.use_identity:
+            input_dim = hidden + num_identity_features
+        else:
+            input_dim = hidden
+            
+        # Create multiple classification heads
+        self.model = nn.ModuleList([nn.Sequential(
+            nn.Linear(input_dim, 128),
+            nn.BatchNorm1d(128),
+            nn.GELU(),
+            nn.Dropout(mlp_dropout),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.GELU(),
+            nn.Dropout(mlp_dropout),
+            nn.Linear(64, 16),
+            nn.BatchNorm1d(16),
+            nn.GELU(),
+            nn.Dropout(mlp_dropout),
+            nn.Linear(16, 2)  # Binary classification for toxicity
+        ) for _ in range(num_heads)])
+        
+    def forward(self, input_ids, attention_mask, identity_features=None):
+        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
+        pooled_output = outputs.pooler_output
+        
+        if self.use_identity and identity_features is not None:
+            # Concatenate with identity features
+            combined = torch.cat([pooled_output, identity_features], dim=1)
+            input_features = combined
+        else:
+            input_features = pooled_output
+        
+        # Get predictions from each head
+        pred = torch.zeros(input_features.shape[0], self.num_heads, 2).to(input_features.device)
+        for idx in range(self.num_heads):
+            y = self.model[idx](input_features)
+            pred[:,idx,:] = y
+                
+        # Return shape: [batch_size, num_heads, num_classes]
+        return pred
