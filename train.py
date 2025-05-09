@@ -414,30 +414,17 @@ def train_jigsaw_baseline(
             avg_train_loss = train_loss / len(train_loader)
             history["train_loss"].append(avg_train_loss)
             
-            print("DEBUG: Training loop completed, starting validation")
-            
             # Validation
             model.eval()
             val_loss = 0.0
             all_preds = []
             all_labels = []
             
-            print("DEBUG: Starting validation loop")
             # Add a progress bar for validation
             val_bar = tqdm(val_loader, desc="Validation", leave=False)
-            val_batch_count = 0
-            total_val_batches = len(val_loader)
 
             with torch.no_grad():
                 for input_ids, attention_mask, identity_features, labels in val_bar:
-                    val_batch_count += 1
-                    # Only print every 100 batches to reduce spam
-                    if val_batch_count % 100 == 0:
-                        print(f"DEBUG: Processing validation batch {val_batch_count}/{total_val_batches}")
-                    
-                    # Track time for validation batch
-                    val_batch_start = time.time()
-                    
                     input_ids = input_ids.to(device)
                     attention_mask = attention_mask.to(device)
                     identity_features = identity_features.to(device)
@@ -452,16 +439,9 @@ def train_jigsaw_baseline(
                     all_preds.extend(preds.cpu().numpy())
                     all_labels.extend(labels.cpu().numpy())
                     
-                    val_batch_time = time.time() - val_batch_start
                     val_bar.set_postfix({
-                        "loss": f"{loss.item():.4f}",
-                        "batch_time": f"{val_batch_time:.2f}s"
+                        "loss": f"{loss.item():.4f}"
                     })
-                    # Only print completion every 100 batches
-                    if val_batch_count % 100 == 0:
-                        print(f"DEBUG: Completed validation batch {val_batch_count} in {val_batch_time:.2f}s")
-
-            print("DEBUG: Validation loop completed, calculating metrics")
             
             # Calculate validation metrics
             avg_val_loss = val_loss / len(val_loader)
@@ -481,9 +461,7 @@ def train_jigsaw_baseline(
             if val_f1 > best_f1:
                 best_f1 = val_f1
                 best_model = copy.deepcopy(model)
-                print(f"DEBUG: New best model saved with F1: {best_f1:.4f}")
         
-        print("DEBUG: Training completed, returning best model")
         return best_model, history
     
     except TimeoutException:
@@ -497,223 +475,184 @@ def train_jigsaw_baseline(
 
 def train_jigsaw_divdis(
     model,
-    train_loader,
-    diverse_loader,
-    val_loader,
+    labeled_loader,
+    unlabeled_loader,
+    val_loader=None,  # Make validation optional
     num_epochs=3,
     learning_rate=2e-5,
     weight_decay=1e-3,
-    device="cpu"
+    device="cpu",
+    timeout_minutes=30,
+    validate_every_epoch=False  # Add flag to control validation
 ):
-    device = torch.device(device)
-    model.to(device)
+    # Set timeout (only on Unix systems)
+    if platform.system() != 'Windows':
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout_minutes * 60)  # Convert minutes to seconds
     
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    criterion = nn.CrossEntropyLoss()
-    
-    # Create epoch progress bar
-    epoch_bar = trange(num_epochs, desc="Epochs")
-    
-    for epoch in epoch_bar:
-        # Regular training on main data
-        model.train()
-        train_loss = 0.0
+    try:
+        device = torch.device(device)
+        model.to(device)
         
-        # Create batch progress bar
-        batch_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", leave=False)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        criterion = nn.CrossEntropyLoss()
         
-        for input_ids, attention_mask, identity_features, labels in batch_bar:
-            input_ids = input_ids.to(device)
-            attention_mask = attention_mask.to(device)
-            identity_features = identity_features.to(device)
-            labels = labels.to(device)
-            
-            # Forward pass
-            optimizer.zero_grad()
-            logits = model(input_ids, attention_mask, identity_features)
-            
-            # Calculate loss for each head
-            loss = 0
-            for h in range(model.num_heads):
-                head_logits = logits[:, h, :]
-                loss += criterion(head_logits, labels)
-            
-            # Average loss across heads
-            loss = loss / model.num_heads
-            
-            # Backward pass
-            loss.backward()
-            optimizer.step()
-            
-            train_loss += loss.item()
-            batch_bar.set_postfix({"loss": f"{loss.item():.4f}"})
+        # Create epoch progress bar
+        epoch_bar = trange(num_epochs, desc="Epochs")
         
-        # Calculate average training loss
-        avg_train_loss = train_loss / len(train_loader)
-        
-        # DivDis training on diverse data
-        model.train()
-        divdis_loss = 0.0
-        
-        # Create DivDis batch progress bar
-        divdis_bar = tqdm(diverse_loader, desc=f"DivDis Training", leave=False)
-        
-        for input_ids, attention_mask, identity_features, labels in divdis_bar:
-            input_ids = input_ids.to(device)
-            attention_mask = attention_mask.to(device)
-            identity_features = identity_features.to(device)
-            labels = labels.to(device)
+        for epoch in epoch_bar:
+            model.train()
+            train_loss = 0.0
+            divdis_loss = 0.0
             
-            # Forward pass
-            optimizer.zero_grad()
-            logits = model(input_ids, attention_mask, identity_features)
+            # Phase 1: Train on labeled data with task loss
+            labeled_bar = tqdm(labeled_loader, desc=f"Labeled Training", leave=False)
             
-            # Calculate task loss for each head
-            task_loss = 0
-            for h in range(model.num_heads):
-                head_logits = logits[:, h, :]
-                task_loss += criterion(head_logits, labels)
-            
-            # Average task loss across heads
-            task_loss = task_loss / model.num_heads
-            
-            # Calculate diversity loss using our function
-            diversity_loss = calculate_diversity_loss(logits)
-            
-            # Combine losses
-            loss = task_loss - model.diversity_weight * diversity_loss
-            
-            # Backward pass
-            loss.backward()
-            optimizer.step()
-            
-            divdis_loss += loss.item()
-            divdis_bar.set_postfix({
-                "task_loss": f"{task_loss.item():.4f}", 
-                "div_loss": f"{diversity_loss.item():.4f}"
-            })
-        
-        # Calculate average DivDis loss
-        avg_divdis_loss = divdis_loss / len(diverse_loader)
-        
-        # Validation phase
-        print("Starting DivDis validation...")
-        model.eval()
-        val_loss = 0.0
-        
-        # Track metrics for each head
-        head_losses = [0.0] * model.num_heads
-        head_correct = [0] * model.num_heads
-        all_predicted = [[] for _ in range(model.num_heads)]
-        all_targets = []
-        
-        # Track ensemble metrics
-        ensemble_correct = 0
-        ensemble_total = 0
-        ensemble_preds_list = []  # Store all ensemble predictions
-        
-        # Create validation progress bar
-        val_bar = tqdm(val_loader, desc="Validation", leave=False)
-        val_batch_count = 0
-        total_val_batches = len(val_loader)
-
-        with torch.no_grad():
-            for input_ids, attention_mask, identity_features, labels in val_bar:
-                val_batch_count += 1
-                # Only print every 100 batches to reduce spam
-                if val_batch_count % 100 == 0:
-                    print(f"DEBUG: Processing DivDis validation batch {val_batch_count}/{total_val_batches}")
-                
-                # Track time for validation batch
-                val_batch_start = time.time()
-                
+            for input_ids, attention_mask, identity_features, labels in labeled_bar:
                 input_ids = input_ids.to(device)
                 attention_mask = attention_mask.to(device)
                 identity_features = identity_features.to(device)
                 labels = labels.to(device)
                 
+                # Forward pass
+                optimizer.zero_grad()
                 logits = model(input_ids, attention_mask, identity_features)
                 
-                # Evaluate each head separately
-                batch_size = labels.size(0)
+                # Calculate task loss for each head
+                task_loss = 0
                 for h in range(model.num_heads):
                     head_logits = logits[:, h, :]
-                    head_loss = criterion(head_logits, labels)
-                    head_losses[h] += head_loss.item()
-                    
-                    _, head_preds = torch.max(head_logits, 1)
-                    head_correct[h] += (head_preds == labels).sum().item()
-                    all_predicted[h].extend(head_preds.cpu().numpy())
+                    task_loss += criterion(head_logits, labels)
                 
-                # Store targets for later metric calculation
-                all_targets.extend(labels.cpu().numpy())
+                # Average task loss across heads
+                task_loss = task_loss / model.num_heads
                 
-                # Average predictions across heads for ensemble evaluation
-                avg_logits = logits.mean(dim=1)
-                ensemble_loss = criterion(avg_logits, labels)
-                val_loss += ensemble_loss.item()
+                # Backward pass with task loss only
+                task_loss.backward()
+                optimizer.step()
                 
-                _, ensemble_preds = torch.max(avg_logits, 1)
-                ensemble_preds_list.extend(ensemble_preds.cpu().numpy())  # Store predictions
-                ensemble_total += batch_size
-                ensemble_correct += (ensemble_preds == labels).sum().item()
-                
-                val_batch_time = time.time() - val_batch_start
-                val_bar.set_postfix({
-                    "loss": f"{ensemble_loss.item():.4f}",
-                    "batch_time": f"{val_batch_time:.2f}s"
+                train_loss += task_loss.item()
+                labeled_bar.set_postfix({
+                    "task_loss": f"{task_loss.item():.4f}"
                 })
-                # Only print completion every 100 batches
-                if val_batch_count % 100 == 0:
-                    print(f"DEBUG: Completed DivDis validation batch {val_batch_count} in {val_batch_time:.2f}s")
+            
+            # Calculate average training loss
+            avg_train_loss = train_loss / len(labeled_loader)
+            
+            # Phase 2: Train on unlabeled data with diversity loss only
+            unlabeled_bar = tqdm(unlabeled_loader, desc=f"Unlabeled Training", leave=False)
+            
+            for input_ids, attention_mask, identity_features, _ in unlabeled_bar:
+                input_ids = input_ids.to(device)
+                attention_mask = attention_mask.to(device)
+                identity_features = identity_features.to(device)
+                
+                # Forward pass
+                optimizer.zero_grad()
+                logits = model(input_ids, attention_mask, identity_features)
+                
+                # Calculate diversity loss
+                diversity_loss = calculate_diversity_loss(logits)
+                
+                # Backward pass with negative diversity loss (we want to maximize diversity)
+                loss = -model.diversity_weight * diversity_loss
+                loss.backward()
+                optimizer.step()
+                
+                divdis_loss += diversity_loss.item()
+                unlabeled_bar.set_postfix({
+                    "div_loss": f"{diversity_loss.item():.4f}"
+                })
+            
+            # Calculate average DivDis loss
+            avg_divdis_loss = divdis_loss / len(unlabeled_loader)
+            
+            # Update progress bar with training metrics only
+            epoch_bar.set_postfix({
+                "train_loss": f"{avg_train_loss:.4f}", 
+                "divdis_loss": f"{avg_divdis_loss:.4f}"
+            })
+            
+            # Only validate if requested and val_loader is provided
+            if validate_every_epoch and val_loader is not None:
+                # Validation code here (existing validation code)
+                pass  # Add this placeholder since validation code is commented out
 
-        print("DEBUG: DivDis validation completed, calculating metrics")
-        
-        # Calculate metrics for ensemble
-        avg_val_loss = val_loss / len(val_loader)
-        ensemble_acc = ensemble_correct / ensemble_total
-        
-        # Convert ensemble predictions list to numpy array for metrics calculation
-        ensemble_preds_array = np.array(ensemble_preds_list)
-        
-        # Calculate metrics for each head
-        print("\n=== Head-specific Validation Results ===")
-        for h in range(model.num_heads):
-            head_acc = head_correct[h] / ensemble_total
-            head_avg_loss = head_losses[h] / len(val_loader)
+            # Optional: Do a final validation after all epochs
+            if val_loader is not None and not validate_every_epoch:
+                print("Performing final validation...")
+                model.eval()
+                val_loss = 0.0
+                
+                # Track metrics for each head
+                head_losses = [0.0] * model.num_heads
+                head_correct = [0] * model.num_heads
+                all_predicted = [[] for _ in range(model.num_heads)]
+                all_targets = []
+                
+                # Track ensemble metrics
+                ensemble_correct = 0
+                ensemble_total = 0
+                ensemble_preds_list = []
+                
+                with torch.no_grad():
+                    for input_ids, attention_mask, identity_features, labels in tqdm(val_loader, desc="Validation"):
+                        input_ids = input_ids.to(device)
+                        attention_mask = attention_mask.to(device)
+                        identity_features = identity_features.to(device)
+                        labels = labels.to(device)
+                        
+                        logits = model(input_ids, attention_mask, identity_features)
+                        
+                        # Evaluate each head separately
+                        batch_size = labels.size(0)
+                        for h in range(model.num_heads):
+                            head_logits = logits[:, h, :]
+                            head_loss = criterion(head_logits, labels)
+                            head_losses[h] += head_loss.item()
+                            
+                            _, head_preds = torch.max(head_logits, 1)
+                            head_correct[h] += (head_preds == labels).sum().item()
+                            all_predicted[h].extend(head_preds.cpu().numpy())
+                        
+                        # Store targets for later metric calculation
+                        all_targets.extend(labels.cpu().numpy())
+                        
+                        # Average predictions across heads for ensemble evaluation
+                        avg_logits = logits.mean(dim=1)
+                        ensemble_loss = criterion(avg_logits, labels)
+                        val_loss += ensemble_loss.item()
+                        
+                        _, ensemble_preds = torch.max(avg_logits, 1)
+                        ensemble_preds_list.extend(ensemble_preds.cpu().numpy())
+                        ensemble_total += batch_size
+                        ensemble_correct += (ensemble_preds == labels).sum().item()
+                
+                # Calculate metrics for ensemble
+                avg_val_loss = val_loss / len(val_loader)
+                ensemble_acc = ensemble_correct / ensemble_total
+                ensemble_preds_array = np.array(ensemble_preds_list)
+                ensemble_f1 = f1_score(all_targets, ensemble_preds_array, average='macro')
+                
+                print(f"Final validation - Loss: {avg_val_loss:.4f}, Acc: {ensemble_acc:.4f}, F1: {ensemble_f1:.4f}")
+                
+                # Print head metrics
+                for h in range(model.num_heads):
+                    head_acc = head_correct[h] / ensemble_total
+                    head_avg_loss = head_losses[h] / len(val_loader)
+                    head_f1 = f1_score(all_targets, all_predicted[h], average='macro')
+                    print(f"Head {h} - Loss: {head_avg_loss:.4f}, Acc: {head_acc:.4f}, F1: {head_f1:.4f}")
             
-            # Calculate additional metrics
-            head_f1 = f1_score(all_targets, all_predicted[h], average='macro')
-            head_precision = precision_score(all_targets, all_predicted[h], average='macro')
-            head_recall = recall_score(all_targets, all_predicted[h], average='macro')
-            
-            # Print confusion matrix
-            print(f"\nHead {h} Confusion Matrix:")
-            cm = confusion_matrix(all_targets, all_predicted[h])
-            print(cm)
-            
-            # Print metrics
-            print(f"Head {h}: Loss={head_avg_loss:.4f}, Acc={head_acc:.4f}, F1={head_f1:.4f}, "
-                  f"Precision={head_precision:.4f}, Recall={head_recall:.4f}")
-        
-        # Print ensemble metrics
-        print("\nEnsemble Metrics:")
-        ensemble_f1 = f1_score(all_targets, ensemble_preds_array, average='macro')  # Use the array
-        ensemble_precision = precision_score(all_targets, ensemble_preds_array, average='macro')
-        ensemble_recall = recall_score(all_targets, ensemble_preds_array, average='macro')
-        print(f"Loss={avg_val_loss:.4f}, Acc={ensemble_acc:.4f}, F1={ensemble_f1:.4f}, "
-              f"Precision={ensemble_precision:.4f}, Recall={ensemble_recall:.4f}")
-        
-        # Update progress bar with metrics
-        epoch_bar.set_postfix({
-            "train_loss": f"{avg_train_loss:.4f}", 
-            "divdis_loss": f"{avg_divdis_loss:.4f}", 
-            "val_loss": f"{avg_val_loss:.4f}", 
-            "val_acc": f"{ensemble_acc:.4f}"
-        })
+        return model
     
-    print("DEBUG: DivDis training fully completed, returning model")
-    return model
+    except TimeoutException:
+        print("WARNING: Training timed out. Returning current model state.")
+        return model
+    
+    finally:
+        # Disable the alarm (only on Unix systems)
+        if platform.system() != 'Windows':
+            signal.alarm(0)
 
 def calculate_diversity_loss(logits):
     """
@@ -727,9 +666,6 @@ def calculate_diversity_loss(logits):
     """
     batch_size, num_heads, num_classes = logits.size()
     
-    # Convert logits to probabilities
-    probs = F.softmax(logits, dim=2)  # [batch_size, num_heads, num_classes]
-    
     # Calculate pairwise KL divergence between heads
     diversity_loss = 0.0
     count = 0
@@ -737,8 +673,12 @@ def calculate_diversity_loss(logits):
     for i in range(num_heads):
         for j in range(i+1, num_heads):
             # KL divergence: KL(p_i || p_j) + KL(p_j || p_i)
-            kl_ij = F.kl_div(probs[:, i, :].log(), probs[:, j, :], reduction='batchmean')
-            kl_ji = F.kl_div(probs[:, j, :].log(), probs[:, i, :], reduction='batchmean')
+            kl_ij = F.kl_div(F.log_softmax(logits[:, i, :], dim=1), 
+                             F.softmax(logits[:, j, :], dim=1), 
+                             reduction='batchmean')
+            kl_ji = F.kl_div(F.log_softmax(logits[:, j, :], dim=1), 
+                             F.softmax(logits[:, i, :], dim=1), 
+                             reduction='batchmean')
             
             diversity_loss += kl_ij + kl_ji
             count += 2

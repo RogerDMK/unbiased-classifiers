@@ -371,4 +371,292 @@ def plot_identity_attribution_differences(bias_df):
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.savefig("jigsaw_plots/attribution_differences_by_text.png")
-    plt.show() 
+    plt.show()
+
+def plot_head_bias_comparison(metrics):
+    """
+    Plot comparison of bias metrics across different heads
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    
+    if 'divdis_heads' not in metrics:
+        print("No head-specific metrics found")
+        return
+    
+    # Extract metrics for each head
+    head_metrics = metrics['divdis_heads']
+    ensemble_metrics = metrics['divdis']
+    
+    # Metrics to compare
+    metric_names = ['overall_auc', 'subgroup_auc_mean', 'bpsn_auc_mean', 'bnsp_auc_mean', 'bias_score', 'final_score']
+    pretty_names = {
+        'overall_auc': 'Overall AUC',
+        'subgroup_auc_mean': 'Subgroup AUC',
+        'bpsn_auc_mean': 'BPSN AUC',
+        'bnsp_auc_mean': 'BNSP AUC',
+        'bias_score': 'Bias Score',
+        'final_score': 'Final Score'
+    }
+    
+    # Create figure
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    axes = axes.flatten()
+    
+    # Plot each metric
+    for i, metric in enumerate(metric_names):
+        values = []
+        for h in range(3):
+            head_name = f"head_{h}"
+            values.append(head_metrics[head_name]['summary'][metric])
+        
+        # Add ensemble value
+        values.append(ensemble_metrics['summary'][metric])
+        
+        # Create bar chart
+        bars = axes[i].bar(['Head 0', 'Head 1', 'Head 2', 'Ensemble'], values)
+        
+        # Color the best head differently
+        best_idx = np.argmax(values[:3])
+        for j, bar in enumerate(bars[:3]):
+            if j == best_idx:
+                bar.set_color('green')
+            else:
+                bar.set_color('blue')
+        bars[3].set_color('orange')
+        
+        # Add labels
+        axes[i].set_title(pretty_names[metric])
+        axes[i].set_ylim(0.7, 1.0)  # Adjust as needed
+        
+        # Add value labels on bars
+        for bar in bars:
+            height = bar.get_height()
+            axes[i].text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                        f'{height:.3f}', ha='center', va='bottom')
+    
+    plt.tight_layout()
+    plt.savefig('head_bias_comparison.png')
+    plt.close()
+    
+    # Now create detailed plots for each identity group showing all three key metrics
+    # Get all identity groups that appear in all heads and ensemble
+    common_identities = set()
+    for identity in ensemble_metrics['identity_metrics'].keys():
+        in_all_heads = True
+        for h in range(3):
+            head_name = f"head_{h}"
+            if identity not in head_metrics[head_name]['identity_metrics']:
+                in_all_heads = False
+                break
+        if in_all_heads:
+            common_identities.add(identity)
+    
+    # Sort identities alphabetically for consistent display
+    common_identities = sorted(list(common_identities))
+    
+    # Create a figure for each of the three key metrics
+    metric_descriptions = {
+        'subgroup_auc': 'Subgroup AUC: Higher is better at distinguishing toxic vs non-toxic comments mentioning identity',
+        'bpsn_auc': 'BPSN AUC: Lower means model falsely flags non-toxic comments mentioning identity',
+        'bnsp_auc': 'BNSP AUC: Lower means model misses toxic comments mentioning identity'
+    }
+    
+    for metric_key, metric_desc in metric_descriptions.items():
+        plt.figure(figsize=(15, 10))
+        
+        # For each identity, plot the metric value for each head and ensemble
+        x = np.arange(len(common_identities))
+        width = 0.2  # Width of bars
+        
+        # Plot each head
+        for h in range(3):
+            head_name = f"head_{h}"
+            values = [head_metrics[head_name]['identity_metrics'][identity][metric_key] 
+                     for identity in common_identities]
+            plt.bar(x + (h-1)*width, values, width, label=f'Head {h}')
+        
+        # Plot ensemble
+        ensemble_values = [ensemble_metrics['identity_metrics'][identity][metric_key] 
+                          for identity in common_identities]
+        plt.bar(x + 2*width, ensemble_values, width, label='Ensemble')
+        
+        # Add labels and legend
+        plt.xlabel('Identity Group')
+        plt.ylabel('AUC Score')
+        plt.title(f'{metric_key.upper()}: {metric_desc}')
+        plt.xticks(x + width/2, common_identities, rotation=90)
+        plt.legend()
+        plt.grid(axis='y', linestyle='--', alpha=0.7)
+        plt.tight_layout()
+        plt.savefig(f'identity_{metric_key}_comparison.png')
+        plt.close()
+    
+    # Create a heatmap showing which head is best for each identity group on each metric
+    for metric_key in ['subgroup_auc', 'bpsn_auc', 'bnsp_auc']:
+        identity_groups = []
+        best_heads = []
+        improvements = []
+        
+        for identity in common_identities:
+            ensemble_score = ensemble_metrics['identity_metrics'][identity][metric_key]
+            head_scores = []
+            
+            for h in range(3):
+                head_name = f"head_{h}"
+                head_score = head_metrics[head_name]['identity_metrics'][identity][metric_key]
+                head_scores.append((h, head_score))
+            
+            best_head, best_score = max(head_scores, key=lambda x: x[1])
+            improvement = best_score - ensemble_score
+            
+            identity_groups.append(identity)
+            best_heads.append(best_head)
+            improvements.append(improvement)
+        
+        # Sort by improvement
+        sorted_indices = np.argsort(improvements)[::-1]
+        sorted_identities = [identity_groups[i] for i in sorted_indices]
+        sorted_heads = [best_heads[i] for i in sorted_indices]
+        sorted_improvements = [improvements[i] for i in sorted_indices]
+        
+        # Create figure for identity specialization
+        plt.figure(figsize=(14, 8))
+        
+        # Create scatter plot
+        colors = ['blue', 'red', 'green']
+        for h in range(3):
+            indices = [i for i, head in enumerate(sorted_heads) if head == h]
+            if indices:
+                plt.scatter(
+                    [i for i in range(len(sorted_identities)) if sorted_heads[i] == h],
+                    [sorted_improvements[i] for i in range(len(sorted_improvements)) if sorted_heads[i] == h],
+                    label=f'Head {h}',
+                    color=colors[h],
+                    s=100
+                )
+        
+        plt.axhline(y=0, color='gray', linestyle='--')
+        plt.xticks(range(len(sorted_identities)), sorted_identities, rotation=90)
+        plt.ylabel(f'Improvement over Ensemble {metric_key.upper()}')
+        plt.title(f'Head Specialization by Identity Group - {metric_key.upper()}')
+        plt.legend()
+        plt.grid(axis='y', linestyle='--', alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f'head_identity_specialization_{metric_key}.png')
+        plt.close()
+    
+    # Create a comprehensive table visualization showing which head is best for each identity on each metric
+    plt.figure(figsize=(16, len(common_identities)*0.4 + 2))
+    
+    # Create a table-like visualization
+    cell_text = []
+    for identity in common_identities:
+        row = [identity]
+        
+        for metric_key in ['subgroup_auc', 'bpsn_auc', 'bnsp_auc']:
+            head_scores = []
+            for h in range(3):
+                head_name = f"head_{h}"
+                score = head_metrics[head_name]['identity_metrics'][identity][metric_key]
+                head_scores.append((h, score))
+            
+            best_head, best_score = max(head_scores, key=lambda x: x[1])
+            ensemble_score = ensemble_metrics['identity_metrics'][identity][metric_key]
+            improvement = best_score - ensemble_score
+            
+            row.append(f"Head {best_head} ({best_score:.3f}, +{improvement:.3f})")
+        
+        cell_text.append(row)
+    
+    # Create table
+    table = plt.table(
+        cellText=cell_text,
+        colLabels=['Identity Group', 'Best Head for Subgroup AUC', 'Best Head for BPSN AUC', 'Best Head for BNSP AUC'],
+        loc='center',
+        cellLoc='center',
+        colWidths=[0.2, 0.25, 0.25, 0.25]
+    )
+    
+    # Style the table
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1, 1.5)
+    
+    # Hide axes
+    plt.axis('off')
+    plt.title('Best Head for Each Identity Group by Metric', fontsize=14, pad=20)
+    plt.tight_layout()
+    plt.savefig('identity_best_head_table.png', bbox_inches='tight')
+    plt.close()
+
+def plot_best_head_vs_baseline(metrics):
+    """
+    Plot comparison of best head performance vs baseline for each identity group
+    """
+    # Extract metrics
+    baseline_metrics = metrics['baseline']['identity_metrics']
+    head_metrics = metrics['divdis_heads']
+    
+    # Get identities
+    identities = list(baseline_metrics.keys())
+    
+    # Find best head for each identity
+    best_head_aucs = []
+    baseline_aucs = []
+    improvements = []
+    best_heads = []
+    
+    for identity in identities:
+        if identity in baseline_metrics:
+            baseline_auc = baseline_metrics[identity]['subgroup_auc']
+            baseline_aucs.append(baseline_auc)
+            
+            # Find best head
+            head_aucs = []
+            for h in range(3):
+                head_name = f"head_{h}"
+                if identity in head_metrics[head_name]['identity_metrics']:
+                    head_auc = head_metrics[head_name]['identity_metrics'][identity]['subgroup_auc']
+                    head_aucs.append((h, head_auc))
+            
+            if head_aucs:
+                best_head, best_auc = max(head_aucs, key=lambda x: x[1])
+                best_heads.append(best_head)
+                best_head_aucs.append(best_auc)
+                improvements.append(best_auc - baseline_auc)
+    
+    # Create figure
+    plt.figure(figsize=(12, 8))
+    
+    # Set up bar positions
+    x = np.arange(len(identities))
+    width = 0.35
+    
+    # Create bars
+    plt.bar(x - width/2, baseline_aucs, width, label='Baseline')
+    plt.bar(x + width/2, best_head_aucs, width, label='Best Head')
+    
+    # Add identity labels and best head annotations
+    plt.xticks(x, identities, rotation=45)
+    
+    for i, (head, imp) in enumerate(zip(best_heads, improvements)):
+        color = 'green' if imp > 0 else 'red'
+        plt.annotate(f'Head {head}\n({imp:.4f})', 
+                     xy=(i + width/2, best_head_aucs[i]),
+                     xytext=(0, 5 if imp > 0 else -25),
+                     textcoords='offset points',
+                     ha='center', va='bottom',
+                     color=color, fontweight='bold')
+    
+    # Add labels and title
+    plt.xlabel('Identity Group')
+    plt.ylabel('Subgroup AUC')
+    plt.title('Best Head vs. Baseline Performance by Identity Group')
+    plt.legend()
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    
+    # Save figure
+    plt.savefig('best_head_vs_baseline.png')
+    plt.close() 

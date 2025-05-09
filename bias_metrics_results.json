@@ -1,0 +1,214 @@
+{
+  "baseline": {
+    "identity_metrics": {
+      "male": {
+        "subgroup_auc": 0.9207459207459207,
+        "bpsn_auc": 0.8462121212121212,
+        "bnsp_auc": 0.9653608603636677
+      },
+      "female": {
+        "subgroup_auc": 0.9620689655172413,
+        "bpsn_auc": 0.8727996141789245,
+        "bnsp_auc": 0.9679709334823924
+      },
+      "christian": {
+        "subgroup_auc": 0.8153846153846154,
+        "bpsn_auc": 0.8760800842992624,
+        "bnsp_auc": 0.8947410614077281
+      },
+      "muslim": {
+        "subgroup_auc": 0.6296296296296297,
+        "bpsn_auc": 0.868395061728395,
+        "bnsp_auc": 0.8934065934065935
+      },
+      "black": {
+        "subgroup_auc": 0.676923076923077,
+        "bpsn_auc": 0.779106029106029,
+        "bnsp_auc": 0.9424209378407852
+      },
+      "white": {
+        "subgroup_auc": 0.6984126984126984,
+        "bpsn_auc": 0.7533068783068785,
+        "bnsp_auc": 0.9528416697091395
+      }
+    },
+    "summary": {
+      "overall_auc": 0.917874242279478,
+      "subgroup_auc_mean": 0.73144252104729,
+      "bpsn_auc_mean": 0.823452197925305,
+      "bnsp_auc_mean": 0.9329583556919333,
+      "bias_score": 0.8292843582215094,
+      "final_score": 0.8514318292360016
+    }
+  },
+  "divdis": {
+    "identity_metrics": {
+      "male": {
+        "subgroup_auc": 0.9685314685314685,
+        "bpsn_auc": 0.8536796536796536,
+        "bnsp_auc": 0.9715803567572238
+      },
+      "female": {
+        "subgroup_auc": 0.9137931034482759,
+        "bpsn_auc": 0.8638775018085363,
+        "bnsp_auc": 0.9480156512017887
+      },
+      "christian": {
+        "subgroup_auc": 0.7824175824175825,
+        "bpsn_auc": 0.8458377239199157,
+        "bnsp_auc": 0.8489658489658489
+      },
+      "muslim": {
+        "subgroup_auc": 0.8888888888888888,
+        "bpsn_auc": 0.7938271604938273,
+        "bnsp_auc": 0.9509157509157509
+      },
+      "black": {
+        "subgroup_auc": 0.6,
+        "bpsn_auc": 0.7739085239085239,
+        "bnsp_auc": 0.9368593238822247
+      },
+      "white": {
+        "subgroup_auc": 0.7248677248677249,
+        "bpsn_auc": 0.7470238095238095,
+        "bnsp_auc": 0.947304368991116
+      }
+    },
+    "summary": {
+      "overall_auc": 0.891160723448376,
+      "subgroup_auc_mean": 0.7469039291475293,
+      "bpsn_auc_mean": 0.8057475430486803,
+      "bnsp_auc_mean": 0.9281452099750804,
+      "bias_score": 0.8269322273904299,
+      "final_score": 0.8429893514049165
+    }
+  },
+  "divdis_heads": {
+    "head_0": {
+      "identity_metrics": {
+        "male": {
+          "subgroup_auc": 0.9673659673659674,
+          "bpsn_auc": 0.8334415584415584,
+          "bnsp_auc": 0.9706301559193193
+        },
+        "female": {
+          "subgroup_auc": 0.8793103448275863,
+          "bpsn_auc": 0.8474801061007957,
+          "bnsp_auc": 0.9088317495807714
+        },
+        "christian": {
+          "subgroup_auc": 0.7802197802197803,
+          "bpsn_auc": 0.8226554267650157,
+          "bnsp_auc": 0.8452781786115119
+        },
+        "muslim": {
+          "subgroup_auc": 0.8765432098765432,
+          "bpsn_auc": 0.7883950617283951,
+          "bnsp_auc": 0.9532967032967032
+        },
+        "black": {
+          "subgroup_auc": 0.6153846153846154,
+          "bpsn_auc": 0.775987525987526,
+          "bnsp_auc": 0.9355507088331516
+        },
+        "white": {
+          "subgroup_auc": 0.746031746031746,
+          "bpsn_auc": 0.7367724867724869,
+          "bnsp_auc": 0.9498600462455884
+        }
+      },
+      "summary": {
+        "overall_auc": 0.87546666383572,
+        "subgroup_auc_mean": 0.7570255115247219,
+        "bpsn_auc_mean": 0.7951867993479534,
+        "bnsp_auc_mean": 0.9210928872314916,
+        "bias_score": 0.8244350660347223,
+        "final_score": 0.8371929654849717
+      }
+    },
+    "head_1": {
+      "identity_metrics": {
+        "male": {
+          "subgroup_auc": 0.9696969696969697,
+          "bpsn_auc": 0.8655844155844157,
+          "bnsp_auc": 0.9716667386515786
+        },
+        "female": {
+          "subgroup_auc": 0.946551724137931,
+          "bpsn_auc": 0.8725584760067518,
+          "bnsp_auc": 0.9609278926774735
+        },
+        "christian": {
+          "subgroup_auc": 0.7824175824175823,
+          "bpsn_auc": 0.8668071654373023,
+          "bnsp_auc": 0.850729517396184
+        },
+        "muslim": {
+          "subgroup_auc": 0.8024691358024691,
+          "bpsn_auc": 0.7925925925925927,
+          "bnsp_auc": 0.9467032967032967
+        },
+        "black": {
+          "subgroup_auc": 0.676923076923077,
+          "bpsn_auc": 0.7655925155925156,
+          "bnsp_auc": 0.9380588876772082
+        },
+        "white": {
+          "subgroup_auc": 0.746031746031746,
+          "bpsn_auc": 0.7347883597883599,
+          "bnsp_auc": 0.951016185955945
+        }
+      },
+      "summary": {
+        "overall_auc": 0.9049686649610212,
+        "subgroup_auc_mean": 0.7839690491018826,
+        "bpsn_auc_mean": 0.8050231846178597,
+        "bnsp_auc_mean": 0.9306085609534559,
+        "bias_score": 0.8398669315577328,
+        "final_score": 0.8561423649085549
+      }
+    },
+    "head_2": {
+      "identity_metrics": {
+        "male": {
+          "subgroup_auc": 0.9696969696969697,
+          "bpsn_auc": 0.8653679653679655,
+          "bnsp_auc": 0.9714939748628687
+        },
+        "female": {
+          "subgroup_auc": 0.9362068965517241,
+          "bpsn_auc": 0.8756932722449963,
+          "bnsp_auc": 0.9498602571268865
+        },
+        "christian": {
+          "subgroup_auc": 0.789010989010989,
+          "bpsn_auc": 0.8603793466807165,
+          "bnsp_auc": 0.84664101330768
+        },
+        "muslim": {
+          "subgroup_auc": 0.9259259259259259,
+          "bpsn_auc": 0.8022222222222223,
+          "bnsp_auc": 0.9518315018315018
+        },
+        "black": {
+          "subgroup_auc": 0.6615384615384615,
+          "bpsn_auc": 0.7863825363825364,
+          "bnsp_auc": 0.9326063249727372
+        },
+        "white": {
+          "subgroup_auc": 0.6931216931216931,
+          "bpsn_auc": 0.7751322751322751,
+          "bnsp_auc": 0.9380552513082633
+        }
+      },
+      "summary": {
+        "overall_auc": 0.8973569575818054,
+        "subgroup_auc_mean": 0.7751487526613914,
+        "bpsn_auc_mean": 0.8215438639048462,
+        "bnsp_auc_mean": 0.925801863232045,
+        "bias_score": 0.8408314932660943,
+        "final_score": 0.854962859345022
+      }
+    }
+  }
+}

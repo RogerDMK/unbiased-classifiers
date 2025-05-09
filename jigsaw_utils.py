@@ -421,6 +421,154 @@ def analyze_divdis_heads(model, data_dict, tokenizer, device="cpu", batch_size=3
     
     return results
 
+def evaluate_bias_metrics_per_head(model, data_dict, tokenizer, device="cpu", batch_size=32, p_value=-5):
+    """
+    Evaluate each head of the DivDis model separately on bias metrics
+    """
+    model.eval()
+    
+    # Get test data
+    test_data = data_dict['full_test']
+    
+    # Identity columns to evaluate
+    identity_cols = data_dict['identity_columns']
+    
+    # Create dataset and loader for full test set
+    test_dataset = JigsawDataset(test_data, tokenizer)
+    test_loader = JigsawDataLoader(test_dataset, batch_size=batch_size)
+    
+    # Check if model has multiple heads
+    has_multiple_heads = hasattr(model, 'num_heads')
+    num_heads = model.num_heads if has_multiple_heads else 1
+    
+    # Store predictions for each head and ensemble
+    all_head_preds = [[] for _ in range(num_heads)] if has_multiple_heads else [[]]
+    all_labels = []
+    
+    with torch.no_grad():
+        for input_ids, attention_mask, identity_features, labels in test_loader:
+            input_ids = input_ids.to(device)
+            attention_mask = attention_mask.to(device)
+            identity_features = identity_features.to(device)
+            
+            if has_multiple_heads:
+                # For DivDis model, get predictions from each head
+                logits = model(input_ids, attention_mask, identity_features)
+                
+                # Store predictions from each head
+                for h in range(num_heads):
+                    head_logits = logits[:, h, :]
+                    head_probs = torch.softmax(head_logits, dim=1)[:, 1].cpu().numpy()
+                    all_head_preds[h].extend(head_probs)
+            else:
+                # For baseline model, just get the predictions
+                logits = model(input_ids, attention_mask, identity_features)
+                probs = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
+                all_head_preds[0].extend(probs)
+            
+            all_labels.extend(labels.cpu().numpy())
+    
+    # Create results for each head
+    results = {}
+    
+    # Process each head (or just the baseline model)
+    for h in range(num_heads):
+        # Create DataFrame with predictions for this head
+        results_df = pd.DataFrame({
+            'toxic': all_labels,
+            'pred': all_head_preds[h]
+        })
+        
+        # Add identity columns
+        test_data_reset = test_data.reset_index(drop=True)
+        if len(results_df) == len(test_data_reset):
+            for col in identity_cols:
+                results_df[col] = test_data_reset[col].values
+        
+        # Calculate bias metrics for each identity
+        bias_metrics = {}
+        
+        for identity in identity_cols:
+            # Skip if too few examples
+            if results_df[identity].sum() < 10:
+                continue
+            
+            # Subgroup: examples mentioning the identity
+            subgroup_df = results_df[results_df[identity] > 0]
+            if len(subgroup_df) >= 10 and len(set(subgroup_df['toxic'])) > 1:
+                subgroup_auc = roc_auc_score(subgroup_df['toxic'], subgroup_df['pred'])
+            else:
+                subgroup_auc = np.nan
+            
+            # BPSN: non-toxic examples mentioning the identity and toxic examples not mentioning it
+            bpsn_df = pd.concat([
+                results_df[(results_df[identity] > 0) & (results_df['toxic'] == 0)],  # non-toxic with identity
+                results_df[(results_df[identity] == 0) & (results_df['toxic'] == 1)]  # toxic without identity
+            ])
+            if len(bpsn_df) >= 10 and len(set(bpsn_df['toxic'])) > 1:
+                bpsn_auc = roc_auc_score(bpsn_df['toxic'], bpsn_df['pred'])
+            else:
+                bpsn_auc = np.nan
+            
+            # BNSP: toxic examples mentioning the identity and non-toxic examples not mentioning it
+            bnsp_df = pd.concat([
+                results_df[(results_df[identity] > 0) & (results_df['toxic'] == 1)],  # toxic with identity
+                results_df[(results_df[identity] == 0) & (results_df['toxic'] == 0)]  # non-toxic without identity
+            ])
+            if len(bnsp_df) >= 10 and len(set(bnsp_df['toxic'])) > 1:
+                bnsp_auc = roc_auc_score(bnsp_df['toxic'], bnsp_df['pred'])
+            else:
+                bnsp_auc = np.nan
+            
+            bias_metrics[identity] = {
+                'subgroup_auc': subgroup_auc,
+                'bpsn_auc': bpsn_auc,
+                'bnsp_auc': bnsp_auc
+            }
+        
+        # Calculate overall AUC
+        overall_auc = roc_auc_score(results_df['toxic'], results_df['pred'])
+        
+        # Calculate generalized means for each submetric
+        subgroup_values = [m['subgroup_auc'] for m in bias_metrics.values() if not np.isnan(m['subgroup_auc'])]
+        bpsn_values = [m['bpsn_auc'] for m in bias_metrics.values() if not np.isnan(m['bpsn_auc'])]
+        bnsp_values = [m['bnsp_auc'] for m in bias_metrics.values() if not np.isnan(m['bnsp_auc'])]
+        
+        # Power mean function
+        def power_mean(values, p):
+            if p == 0:
+                return np.exp(np.mean(np.log(values)))
+            else:
+                return np.power(np.mean(np.power(values, p)), 1/p)
+        
+        # Calculate generalized means
+        subgroup_mean = power_mean(subgroup_values, p_value) if subgroup_values else np.nan
+        bpsn_mean = power_mean(bpsn_values, p_value) if bpsn_values else np.nan
+        bnsp_mean = power_mean(bnsp_values, p_value) if bnsp_values else np.nan
+        
+        # Calculate final score
+        bias_score = (subgroup_mean + bpsn_mean + bnsp_mean) / 3
+        final_score = 0.25 * overall_auc + 0.25 * subgroup_mean + 0.25 * bpsn_mean + 0.25 * bnsp_mean
+        
+        # Prepare results
+        summary = {
+            'overall_auc': overall_auc,
+            'subgroup_auc_mean': subgroup_mean,
+            'bpsn_auc_mean': bpsn_mean,
+            'bnsp_auc_mean': bnsp_mean,
+            'bias_score': bias_score,
+            'final_score': final_score
+        }
+        
+        # Store results for this head
+        head_name = f"head_{h}" if has_multiple_heads else "baseline"
+        results[head_name] = {
+            'identity_metrics': bias_metrics,
+            'summary': summary
+        }
+    
+    return results
+
 def evaluate_bias_metrics(model, data_dict, tokenizer, device="cpu", batch_size=32, p_value=-5):
     """
     Evaluate model on bias metrics as defined in the Jigsaw competition
@@ -440,7 +588,6 @@ def evaluate_bias_metrics(model, data_dict, tokenizer, device="cpu", batch_size=
     # Get predictions for all test examples
     all_preds = []
     all_labels = []
-    all_ids = []
     
     with torch.no_grad():
         for input_ids, attention_mask, identity_features, labels in test_loader:
@@ -460,36 +607,18 @@ def evaluate_bias_metrics(model, data_dict, tokenizer, device="cpu", batch_size=
             
             all_preds.extend(probs)
             all_labels.extend(labels.cpu().numpy())
-            all_ids.extend(range(len(probs)))
     
     # Create DataFrame with predictions
     results_df = pd.DataFrame({
-        'id': all_ids,
         'toxic': all_labels,
         'pred': all_preds
     })
     
-    # Debug: Print column names before merge
-    print("Results DF columns:", results_df.columns.tolist())
-    print("Test data columns:", test_data.columns.tolist())
-    
-    # Create a copy of test_data with reset index to ensure proper merging
+    # Add identity columns
     test_data_reset = test_data.reset_index(drop=True)
-    
-    # Make sure the 'id' column in results_df corresponds to the index in test_data_reset
-    # This assumes that the order of predictions matches the order of the test dataset
     if len(results_df) == len(test_data_reset):
-        # Merge identity information from test data
         for col in identity_cols:
             results_df[col] = test_data_reset[col].values
-    else:
-        print(f"Warning: Length mismatch between results ({len(results_df)}) and test data ({len(test_data_reset)})")
-        # Try to merge based on id, but this might not work if ids don't match
-        results_df = pd.merge(results_df, test_data_reset[['toxic'] + identity_cols], 
-                             left_on='id', right_index=True, how='left')
-    
-    # Debug: Print column names after merge
-    print("Results DF columns after merge:", results_df.columns.tolist())
     
     # Calculate bias metrics for each identity
     bias_metrics = {}
@@ -570,3 +699,29 @@ def evaluate_bias_metrics(model, data_dict, tokenizer, device="cpu", batch_size=
         'identity_metrics': bias_metrics,
         'summary': summary
     }
+
+def split_labeled_unlabeled(df, labeled_ratio=0.7, random_state=42):
+    """
+    Split dataframe into labeled and unlabeled sets
+    
+    Args:
+        df: Pandas dataframe with data
+        labeled_ratio: Ratio of data to use as labeled
+        random_state: Random seed for reproducibility
+        
+    Returns:
+        labeled_df, unlabeled_df: Split dataframes
+    """
+    # Shuffle the dataframe
+    df_shuffled = df.sample(frac=1, random_state=random_state).reset_index(drop=True)
+    
+    # Calculate split point
+    split_idx = int(len(df_shuffled) * labeled_ratio)
+    
+    # Split the data
+    labeled_df = df_shuffled.iloc[:split_idx].copy()
+    unlabeled_df = df_shuffled.iloc[split_idx:].copy()
+    
+    print(f"Split data into {len(labeled_df)} labeled and {len(unlabeled_df)} unlabeled examples")
+    
+    return labeled_df, unlabeled_df
