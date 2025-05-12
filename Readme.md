@@ -19,6 +19,8 @@ For COMPAS and Twitter hatespeech models hyperparameters, including seeds, can b
 
 ## Running Jigsaw Toxicity Classification Experiments
 
+First, you need to download the data (all_data.csv) from https://www.kaggle.com/competitions/jigsaw-unintended-bias-in-toxicity-classification and put it in the jigsaw_toxicity_bias folder (file is too big to upload to github).
+
 1. Run the Full Pipeline
    This command runs the complete pipeline including data preprocessing, model training, and evaluation:
 
