@@ -153,6 +153,30 @@ class DivDisClassifier(nn.Module):
             pred[:,idx,:] = y
         return pred
     
+class DivDisResidualClassifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim=128, num_blocks=3, dropout_rate=0.1, num_classes=3, num_heads=3, diversity_weight = 0.001):
+        super().__init__()
+        self.input_proj = nn.ModuleList([nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU()
+        ) for _ in range(num_heads)])
+        self.num_classes = num_classes
+        self.num_heads = num_heads
+        self.blocks = nn.ModuleList([nn.Sequential(*[
+            ResidualBlock(hidden_dim, dropout_rate) for _ in range(num_blocks)
+        ]) for _ in range(num_heads)])
+        self.diversity_weight = diversity_weight
+        self.final_layer = nn.ModuleList([nn.Linear(hidden_dim, num_classes) for _ in range(num_heads)])
+    
+    def forward(self, x):
+        pred = torch.zeros(x.shape[0], self.num_heads, self.num_classes).to(x.device)
+        for idx in range(self.num_heads):
+            y = self.input_proj[idx](x)
+            blockout = self.blocks[idx](y)
+            pred[:,idx,:] = self.final_layer[idx](blockout)
+        return pred
+    
 class ModelWrapper(nn.Module):
     def __init__(self, model, target_class):
         super().__init__()
@@ -168,12 +192,16 @@ class HeadWrapper(nn.Module):
         super().__init__()
         self.divdis_model = divdis_model
         self.head_index = head_index
-        self.head_model = divdis_model.model[head_index]
+        self.input_proj = divdis_model.input_proj[head_index]
+        self.block = divdis_model.blocks[head_index]
+        self.final_layer = divdis_model.final_layer[head_index]
         self.apply_softmax = apply_softmax
         self.softmax = nn.Softmax(dim=-1)
     
     def forward(self, x):
-        out = self.head_model(x)
+        inp = self.input_proj(x)
+        blk = self.block(inp)
+        out = self.final_layer(blk)
         if self.apply_softmax:
             out = self.softmax(out)
         return out

@@ -12,7 +12,7 @@ import copy
 import signal
 import platform
 
-def train_model(model, train_loader, val_loader, criterion, num_epochs=20, learning_rate=0.001):
+def train_model(model, train_loader, val_loader, criterion, num_epochs=20, learning_rate=0.001, write_file='base_classifier_log.txt'):
     device = torch.device("cpu")
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
@@ -42,7 +42,9 @@ def train_model(model, train_loader, val_loader, criterion, num_epochs=20, learn
         
         train_loss = train_loss / len(train_loader.dataset)
         history['train_loss'].append(train_loss)
-        
+        with open(write_file, 'a') as f:
+            f.write("Epoch: {}\n".format(epoch))
+            f.write("Train_loss: {}\n".format(train_loss))
         model.eval()
         val_loss = 0.0
         all_targets = []
@@ -64,16 +66,17 @@ def train_model(model, train_loader, val_loader, criterion, num_epochs=20, learn
         val_loss = val_loss / len(val_loader.dataset)
         
         val_f1 = f1_score(all_targets, all_predicted, average='macro')
-        print(confusion_matrix(all_targets,all_predicted))
-        scheduler.step(val_f1)
-        precision = precision_score(all_targets, all_predicted, average='macro')
-        recall = recall_score(all_targets, all_predicted, average='macro')
-        
-        history['val_loss'].append(val_loss)
-        history['val_f1'].append(val_f1)
-        
-        print(f'Epoch [{epoch+1}/{num_epochs}] | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val F1: {val_f1:.4f}')
-        print(f'Precision: {precision:.4f} | Recall: {recall:.4f}')
+        with open(write_file, 'a') as f:
+            f.write(str(confusion_matrix(all_targets,all_predicted)))
+            scheduler.step(val_f1)
+            precision = precision_score(all_targets, all_predicted, average='macro')
+            recall = recall_score(all_targets, all_predicted, average='macro')
+            
+            history['val_loss'].append(val_loss)
+            history['val_f1'].append(val_f1)
+            
+            f.write(f'Epoch [{epoch+1}/{num_epochs}] | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val F1: {val_f1:.4f}\n')
+            f.write(f'Precision: {precision:.4f} | Recall: {recall:.4f}\n')
         
         torch.save(model.state_dict(), 'best_recidivism_model.pt')
         
@@ -81,7 +84,7 @@ def train_model(model, train_loader, val_loader, criterion, num_epochs=20, learn
     model.load_state_dict(torch.load('best_recidivism_model.pt'))
     return model, history
 
-def trainDivDis( model, epochs, train_loader, diverse_loader, val_loader, criterion, start_offset=0, learning_rate=0.001):
+def trainDivDis( model, epochs, train_loader, diverse_loader, val_loader, criterion, start_offset=0, learning_rate=0.001, write_file='divdis_classifier_log.txt'):
     divCriterion = DivDisLoss(model.num_heads)
     device = torch.device("cpu")
     model.to(device)
@@ -127,13 +130,14 @@ def trainDivDis( model, epochs, train_loader, diverse_loader, val_loader, criter
             objective.backward()
             optimizer.step()
             optimizer.zero_grad()
+        with open(write_file, 'a') as f:
+            f.write("Epoch {}\n".format(epoch))
         
-        print("Epoch {}".format(epoch))
-        for idx in range(model.num_heads):
-            print("head {:.4f}: labelled loss = {:.4f} labelled accuracy = {:.4f}".format(idx, class_loss_tracker[idx], class_acc_tracker[idx]))
+            for idx in range(model.num_heads):
+                f.write("head {:.4f}: labelled loss = {:.4f} labelled accuracy = {:.4f}\n".format(idx, class_loss_tracker[idx], class_acc_tracker[idx]))
         
-        print("div loss = {}".format(div_loss_tracker/epochs))
-        print("ensemble loss = {}".format(total_loss_tracker/epochs))
+            f.write("div loss = {}\n".format(div_loss_tracker/epochs))
+            f.write("ensemble loss = {}\n".format(total_loss_tracker/epochs))
     all_targets = []
     all_predicted = [[] for _ in range(model.num_heads)]
     with torch.no_grad():
@@ -150,19 +154,19 @@ def trainDivDis( model, epochs, train_loader, diverse_loader, val_loader, criter
                 labelled_loss += class_loss
                 all_predicted[idx].extend(pred_class.cpu().numpy())
             all_targets.extend(targets.cpu().numpy())
-        
-        for idx in range(model.num_heads):
-            print("Stats for head:", idx)
-            print(confusion_matrix(all_targets,all_predicted[idx]))
-            val_f1 = f1_score(all_targets, all_predicted[idx], average='macro')
-            print('F1 score:', val_f1)
-            precision = precision_score(all_targets, all_predicted[idx], average='macro')
-            recall = recall_score(all_targets, all_predicted[idx], average='macro')
-            print(f'Precision: {precision:.4f} | Recall: {recall:.4f}')
-            print("__________________________________________________")
-        
-        for idx in range(model.num_heads):
-            print("Head {}: accuracy of test {}".format(idx, val_loss[idx]))
+        with open(write_file, 'a') as f:
+            for idx in range(model.num_heads):
+                f.write("Stats for head: {} \n".format(idx))
+                f.write(str(confusion_matrix(all_targets,all_predicted[idx])))
+                val_f1 = f1_score(all_targets, all_predicted[idx], average='macro')
+                f.write('F1 score: {}\n'.format(val_f1))
+                precision = precision_score(all_targets, all_predicted[idx], average='macro')
+                recall = recall_score(all_targets, all_predicted[idx], average='macro')
+                f.write(f'Precision: {precision:.4f} | Recall: {recall:.4f}\n')
+                f.write("__________________________________________________\n")
+            
+            for idx in range(model.num_heads):
+                f.write("Head {}: accuracy of test {}".format(idx, val_loss[idx]))
     return total_loss_tracker/epochs
 
    
