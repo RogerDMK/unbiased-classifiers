@@ -12,13 +12,14 @@ The repo includes models, explainability methods, utility functions, and analyse
 - `compas.py` - Performs analysis on the COMPAS dataset, focusing on fairness and biases in risk assessments.
 - `twitter.py` - Conducts hate speech detection and analysis on Twitter data.
 - `jigsaw_utils.py` - Contains Jigsaw utils
-- `jigsaw_visualizer.py` - Contains Jigsaw explainability code
+- `jigsaw_visualizer.py` - Contains Jigsaw visualization code
 - `jigsaw-pipeline` - Contains pipeline to run jigsaw analysis and models
 
 For COMPAS and Twitter hatespeech models hyperparameters, including seeds, can be set within the files. The LIME and Shapely results for COMPAS data are in 3 heads, 5 heads, 10 heads, for each ensemble size respectively.
 
-## Evaluation for the COMPAS and Twitter dataset
-To train and evalute the models on COMPAS and Twitter hatespeech dataset, run the corresponding scripts: 
+## Running COMPAS and Twitter experiments
+
+To train and evalute the models on COMPAS and Twitter hatespeech dataset, run the corresponding scripts:
 
 1. COMPAS Dataset
 
@@ -31,6 +32,7 @@ python compas.py
 ```
 python twitter.py
 ```
+
 ## Running Jigsaw Toxicity Classification Experiments
 
 First, you need to download the data (all_data.csv) from https://www.kaggle.com/competitions/jigsaw-unintended-bias-in-toxicity-classification and put it in the jigsaw_toxicity_bias folder (file is too big to upload to github).
