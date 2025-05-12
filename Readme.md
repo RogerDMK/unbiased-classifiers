@@ -17,6 +17,17 @@ The repo includes models, explainability methods, utility functions, and analyse
 
 For COMPAS and Twitter hatespeech models hyperparameters, including seeds, can be set within the files. The LIME and Shapely results for COMPAS data are in 3 heads, 5 heads, 10 heads, for each ensemble size respectively.
 
+## Evalutation on the COMPAS and Twitter dataset
+1. COMPAS
+
+```
+python compas.py
+```
+2. Twitter
+
+```
+python twitter.py
+```
 ## Running Jigsaw Toxicity Classification Experiments
 
 First, you need to download the data (all_data.csv) from https://www.kaggle.com/competitions/jigsaw-unintended-bias-in-toxicity-classification and put it in the jigsaw_toxicity_bias folder (file is too big to upload to github).
