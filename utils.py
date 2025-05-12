@@ -173,7 +173,7 @@ class COMPASDataset(Dataset):
     def get_columns(self):
         return self.feature_columns.columns.tolist()
 
-def create_data_splits(dataset, train_ratio=0.40, diverse_ratio=0.40, val_ratio=0.0, test_ratio=0.20, batch_size=64, seed=64):
+def create_data_splits(dataset, train_ratio=0.45, diverse_ratio=0.40, val_ratio=0.0, test_ratio=0.15, batch_size=64, seed=64):
     assert np.isclose(train_ratio + val_ratio + test_ratio + diverse_ratio, 1.0)
     torch.manual_seed(seed)
     dataset_size = len(dataset)
