@@ -2,3 +2,4 @@ TwitterAAE-full-v1/
 __pycache__/
 *.pt
 jigsaw_toxicity_bias/all_data.csv
+.DS_Store
